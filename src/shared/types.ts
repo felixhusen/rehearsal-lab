@@ -1,6 +1,20 @@
 export type StemId = 'vocals' | 'drums' | 'bass' | 'other' | 'piano' | 'guitar'
 export type StemPanMap = Partial<Record<StemId, number>>
 
+export interface MetronomeSettings {
+  enabled: boolean
+  bpm: number
+  firstBeat: number
+  volume: number
+}
+
+export const DEFAULT_METRONOME_SETTINGS: MetronomeSettings = {
+  enabled: false,
+  bpm: 120,
+  firstBeat: 0,
+  volume: 0.7
+}
+
 // which GPU vendor GPU acceleration targets: NVIDIA via CUDA torch (windows
 // + linux), AMD via ROCm torch (linux only)
 export type GpuVendor = 'nvidia' | 'amd'
@@ -125,6 +139,8 @@ export interface StemKitApi {
   getBuffers(videoId: string): Promise<Record<string, Uint8Array>>
   getStemPan(videoId: string): Promise<StemPanMap>
   setStemPan(videoId: string, pans: StemPanMap): Promise<void>
+  getMetronomeSettings(videoId: string): Promise<MetronomeSettings>
+  setMetronomeSettings(videoId: string, settings: MetronomeSettings): Promise<void>
   exportStem(videoId: string, stem: string): Promise<{ saved: boolean; path?: string }>
   exportAllStems(videoId: string): Promise<{ saved: boolean; path?: string; count?: number }>
   searchYouTube(query: string): Promise<SearchResult[]>

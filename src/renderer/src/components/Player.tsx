@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppSettings, Song, StemId, StemPanMap } from '../../../shared/types'
+import {
+  DEFAULT_METRONOME_SETTINGS,
+  type AppSettings,
+  type MetronomeSettings,
+  type Song,
+  type StemId,
+  type StemPanMap
+} from '../../../shared/types'
 import { engine, decodePayload, type BufferMap } from '../lib/engine'
 import { buildStemMeta } from '../lib/stems'
 import { fmtTime } from '../lib/format'
 import { SongThumb } from '../lib/thumbs'
 import { YouTubeHost, type YTState } from '../lib/youtube'
 import { StemLane } from './StemLane'
+import { MetronomeLane } from './MetronomeLane'
 import { Transport, type PresetId } from './Transport'
 import { DownloadIcon } from './Icons'
 
@@ -59,9 +67,15 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const pendingPan = useRef<{ videoId: string; pans: StemPanMap } | null>(null)
   const panGeneration = useRef(0)
   const panRevision = useRef(0)
+  const metronomeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingMetronome = useRef<{ videoId: string; settings: MetronomeSettings } | null>(null)
   const [mutes, setMutes] = useState<Set<StemId>>(new Set())
   const [solos, setSolos] = useState<Set<StemId>>(new Set())
   const [master, setMaster] = useState(0.9)
+  const [transpose, setTranspose] = useState(0)
+  const [metronome, setMetronome] = useState<MetronomeSettings>({ ...DEFAULT_METRONOME_SETTINGS })
+  const [metronomeLoadedFor, setMetronomeLoadedFor] = useState('')
+  const [metronomeError, setMetronomeError] = useState<string | null>(null)
   const [preset, setPreset] = useState<PresetId | 'custom'>('all')
 
   const stemMeta = useMemo(() => buildStemMeta(Object.keys(buffers) as StemId[]), [buffers])
@@ -96,6 +110,12 @@ export function Player({ song, settings }: Props): React.ReactElement {
     setMutes(new Set())
     setSolos(new Set())
     setPreset('all')
+    setTranspose(0)
+    engine.setTranspose(0)
+    setMetronome({ ...DEFAULT_METRONOME_SETTINGS })
+    engine.setMetronome({ ...DEFAULT_METRONOME_SETTINGS })
+    setMetronomeLoadedFor('')
+    setMetronomeError(null)
     engine.stopAll()
 
     let cancelled = false
@@ -106,16 +126,30 @@ export function Player({ song, settings }: Props): React.ReactElement {
       pendingPan.current = null
       if (pending) void window.stemkit.setStemPan(pending.videoId, pending.pans).catch(() => {})
     }
+    const flushMetronome = (): void => {
+      if (metronomeSaveTimer.current !== null) clearTimeout(metronomeSaveTimer.current)
+      metronomeSaveTimer.current = null
+      const pending = pendingMetronome.current
+      pendingMetronome.current = null
+      if (pending) {
+        void window.stemkit.setMetronomeSettings(pending.videoId, pending.settings).catch(() => {})
+      }
+    }
     window.addEventListener('beforeunload', flushPan)
+    window.addEventListener('beforeunload', flushMetronome)
     setDecoding(true)
     Promise.all([
       getDecoded(song.videoId),
       window.stemkit.getStemPan(song.videoId).catch(() => {
         if (!cancelled) setPanError('Could not load saved pan settings. Using center.')
         return {} as StemPanMap
+      }),
+      window.stemkit.getMetronomeSettings(song.videoId).catch(() => {
+        if (!cancelled) setMetronomeError('Could not load saved metronome settings. Using defaults.')
+        return { ...DEFAULT_METRONOME_SETTINGS }
       })
     ])
-      .then(([decoded, savedPan]) => {
+      .then(([decoded, savedPan, savedMetronome]) => {
         if (cancelled) return
         const initialPans = Object.fromEntries(Object.keys(decoded).map((id) => {
           const value = savedPan[id as StemId]
@@ -123,6 +157,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
         })) as StemPanMap
         pansRef.current = initialPans
         setPans(initialPans)
+        setMetronome(savedMetronome)
+        engine.setMetronome(savedMetronome)
+        setMetronomeLoadedFor(song.videoId)
         setBuffers(decoded)
         engine.setBuffers(decoded)
         setVols(Object.fromEntries(Object.keys(decoded).map((id) => [id, 1])))
@@ -140,7 +177,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
       cancelled = true
       if (panGeneration.current === generation) ++panGeneration.current
       window.removeEventListener('beforeunload', flushPan)
+      window.removeEventListener('beforeunload', flushMetronome)
       flushPan()
+      flushMetronome()
       engine.stopAll()
       hostRef.current?.destroy()
       hostRef.current = null
@@ -290,6 +329,36 @@ export function Player({ song, settings }: Props): React.ReactElement {
     void bump
     return posRef.current
   }, [bump])
+
+  const changeTranspose = useCallback((semitones: number): void => {
+    setTranspose(semitones)
+    engine.setTranspose(semitones)
+  }, [])
+
+  const changeMetronome = useCallback((patch: Partial<MetronomeSettings>): void => {
+    const next = { ...metronome, ...patch }
+    setMetronome(next)
+    engine.setMetronome(next)
+    if (metronomeLoadedFor !== song.videoId) return
+    pendingMetronome.current = { videoId: song.videoId, settings: next }
+    if (metronomeSaveTimer.current !== null) clearTimeout(metronomeSaveTimer.current)
+    metronomeSaveTimer.current = setTimeout(() => {
+      metronomeSaveTimer.current = null
+      const pending = pendingMetronome.current
+      pendingMetronome.current = null
+      if (!pending) return
+      void window.stemkit.setMetronomeSettings(pending.videoId, pending.settings).then(() => {
+        setMetronomeError(null)
+      }).catch(() => {
+        setMetronomeError('Could not save metronome settings.')
+      })
+    }, 250)
+  }, [metronome, metronomeLoadedFor, song.videoId])
+
+  const setFirstBeat = useCallback((): void => {
+    const position = playingRef.current ? engine.expected() : posRef.current
+    changeMetronome({ firstBeat: Math.max(0, Math.min(duration, position)), enabled: true })
+  }, [changeMetronome, duration])
 
   const exportStem = useCallback(
     (stem: string): void => {
@@ -454,10 +523,26 @@ export function Player({ song, settings }: Props): React.ReactElement {
             onPreset={applyPreset}
             master={master}
             onMaster={setMaster}
+            transpose={transpose}
+            onTranspose={changeTranspose}
             youtubeUrl={youtubeUrl ?? undefined}
           />
 
           {panError && <p role="status" className="mt-3 text-xs text-amber-300">{panError}</p>}
+          <div className="mt-4">
+            <MetronomeLane
+              enabled={metronome.enabled}
+              bpm={metronome.bpm}
+              firstBeat={metronome.firstBeat}
+              volume={metronome.volume}
+              disabled={decoding || !!decodeError || metronomeLoadedFor !== song.videoId}
+              onEnabled={(enabled) => changeMetronome({ enabled })}
+              onBpm={(bpm) => changeMetronome({ bpm })}
+              onSetFirstBeat={setFirstBeat}
+              onVolume={(volume) => changeMetronome({ volume })}
+            />
+          </div>
+          {metronomeError && <p role="status" className="mt-2 text-xs text-amber-300">{metronomeError}</p>}
           <div className="mt-4 space-y-2">
             {decoding
               ? [...Array(4)].map((_, i) => (

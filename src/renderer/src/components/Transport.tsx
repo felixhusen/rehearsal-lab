@@ -21,6 +21,8 @@ interface Props {
   onPreset: (p: PresetId) => void
   master: number
   onMaster: (v: number) => void
+  transpose: number
+  onTranspose: (v: number) => void
   // local-file songs have no video to link out to
   youtubeUrl?: string
 }
@@ -103,6 +105,8 @@ export function Transport({
   onPreset,
   master,
   onMaster,
+  transpose,
+  onTranspose,
   youtubeUrl
 }: Props): React.ReactElement {
   return (
@@ -136,6 +140,25 @@ export function Transport({
               {p.label}
             </button>
           ))}
+        </div>
+
+        <div className="no-drag flex items-center gap-2 text-xs text-white/60">
+          <span>Transpose</span>
+          <button
+            onClick={() => onTranspose(transpose - 1)}
+            disabled={transpose <= -12}
+            aria-label="Transpose down one semitone"
+            className="w-7 h-7 rounded-full bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+          >−</button>
+          <span className="w-9 text-center font-mono tabular-nums text-white" aria-live="polite">
+            {transpose > 0 ? `+${transpose}` : transpose}
+          </span>
+          <button
+            onClick={() => onTranspose(transpose + 1)}
+            disabled={transpose >= 12}
+            aria-label="Transpose up one semitone"
+            className="w-7 h-7 rounded-full bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+          >+</button>
         </div>
 
         <div className="flex items-center gap-3 w-44">

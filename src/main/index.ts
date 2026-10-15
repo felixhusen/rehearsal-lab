@@ -32,7 +32,7 @@ import {
 import { loadSettings, saveSettings } from './settings'
 import {
   loadSongs, removeSong, stemBuffers, stemsDir, stemsFor, mixWavPath,
-  AUDIO_EXTENSIONS, loadStemPan, saveStemPan
+  AUDIO_EXTENSIONS, loadStemPan, saveStemPan, loadMetronomeSettings, saveMetronomeSettings
 } from './library'
 import { startJob, startLocalJob, cancelJob, searchYouTube } from './pipeline'
 import { initUpdater } from './updater'
@@ -249,6 +249,8 @@ app.whenReady().then(async () => {
   ipcMain.handle('library:list', () => loadSongs())
   ipcMain.handle('song:pan:get', (_e, videoId: string) => loadStemPan(videoId))
   ipcMain.handle('song:pan:set', (_e, videoId: string, pans: unknown) => saveStemPan(videoId, pans))
+  ipcMain.handle('song:metronome:get', (_e, videoId: string) => loadMetronomeSettings(videoId))
+  ipcMain.handle('song:metronome:set', (_e, videoId: string, settings: unknown) => saveMetronomeSettings(videoId, settings))
   ipcMain.handle('library:delete', (_e, videoId: string) => removeSong(videoId))
   ipcMain.handle('song:buffers', (_e, videoId: string) => {
     const song = loadSongs().find((s) => s.videoId === videoId)
