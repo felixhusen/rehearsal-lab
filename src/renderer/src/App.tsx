@@ -54,6 +54,7 @@ export default function App(): React.ReactElement {
   const [appVersion, setAppVersion] = useState<string | undefined>(undefined)
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsSaveError, setSettingsSaveError] = useState('')
   const [aboutOpen, setAboutOpen] = useState(false)
 
   useEffect(() => {
@@ -295,9 +296,15 @@ export default function App(): React.ReactElement {
       {settings && settingsOpen && (
         <Settings
           settings={settings}
+          saveError={settingsSaveError}
           gpu={status.gpu}
           gpuVendor={status.gpuVendor}
-          onChange={(patch) => void window.stemkit.setSettings(patch)}
+          onChange={(patch) => {
+            setSettingsSaveError('')
+            void window.stemkit.setSettings(patch).then(setSettings).catch(() => {
+              setSettingsSaveError('Could not save settings.')
+            })
+          }}
           onClose={() => setSettingsOpen(false)}
         />
       )}

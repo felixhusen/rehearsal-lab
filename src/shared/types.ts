@@ -1,18 +1,31 @@
 export type StemId = 'vocals' | 'drums' | 'bass' | 'other' | 'piano' | 'guitar'
 export type StemPanMap = Partial<Record<StemId, number>>
+export type MetronomeSound =
+  | 'Blip'
+  | 'Classic'
+  | 'Cowbell'
+  | 'Digital'
+  | 'Gentle'
+  | 'Percussive'
+  | 'Saw'
+  | 'Woodblock'
 
 export interface MetronomeSettings {
   enabled: boolean
   bpm: number
+  timeSignature: '3/4' | '4/4' | '6/8'
   firstBeat: number
   volume: number
+  pan: number
 }
 
 export const DEFAULT_METRONOME_SETTINGS: MetronomeSettings = {
   enabled: false,
   bpm: 120,
+  timeSignature: '4/4',
   firstBeat: 0,
-  volume: 0.7
+  volume: 1,
+  pan: 0
 }
 
 // which GPU vendor GPU acceleration targets: NVIDIA via CUDA torch (windows
@@ -49,6 +62,7 @@ export interface AppSettings {
   // hide the YouTube video while playing: stems are always played locally,
   // this stops streaming the video and falls back to cached thumbnails
   hideVideo: boolean
+  metronomeSound: MetronomeSound
   // format used when exporting stems: wav is the lossless source format,
   // aac (.m4a) is transcoded on export via the bundled ffmpeg. mp3 isn't an
   // option — the bundled ffmpeg is a minimal static build without libmp3lame
@@ -61,6 +75,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   roformerVocals: false,
   gpuSplit: false,
   hideVideo: false,
+  metronomeSound: 'Classic',
   exportFormat: 'wav'
 }
 

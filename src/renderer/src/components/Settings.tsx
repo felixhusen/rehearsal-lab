@@ -6,6 +6,7 @@ interface Props {
   settings: AppSettings
   gpu?: boolean
   gpuVendor?: GpuVendor
+  saveError?: string
   onChange: (patch: Partial<AppSettings>) => void
   onClose: () => void
 }
@@ -108,7 +109,7 @@ function SectionHeader({ label }: { label: string }): React.ReactElement {
   )
 }
 
-export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props): React.ReactElement {
+export function Settings({ settings, gpu, gpuVendor, saveError, onChange, onClose }: Props): React.ReactElement {
   const [engines, setEngines] = useState<EngineStatus | null>(null)
   const [vocalsPct, setVocalsPct] = useState<number | null>(null)
   const [ftPct, setFtPct] = useState<number | null>(null)
@@ -238,6 +239,7 @@ export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props)
         </div>
 
         <div className="px-5 py-4 space-y-6 max-h-[70vh] overflow-y-auto">
+          {saveError && <p role="status" className="text-xs text-rose-300">{saveError}</p>}
           <section className="space-y-5">
             <SectionHeader label="Separation" />
             <div className="flex items-start justify-between gap-4">
@@ -350,6 +352,26 @@ export function Settings({ settings, gpu, gpuVendor, onChange, onClose }: Props)
                 on={settings.hideVideo}
                 onClick={() => onChange({ hideVideo: !settings.hideVideo })}
               />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium">Metronome click sound</p>
+                <p className="text-[11.5px] text-white/40 leading-relaxed mt-0.5">
+                  Choose the click sound used for every song.
+                </p>
+              </div>
+              <select
+                value={settings.metronomeSound}
+                onChange={(event) =>
+                  onChange({ metronomeSound: event.target.value as AppSettings['metronomeSound'] })
+                }
+                className="no-drag shrink-0 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-xs text-white"
+                aria-label="Metronome click sound"
+              >
+                {(['Blip', 'Classic', 'Cowbell', 'Digital', 'Gentle', 'Percussive', 'Saw', 'Woodblock'] as const).map((type) => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
             </div>
           </section>
 

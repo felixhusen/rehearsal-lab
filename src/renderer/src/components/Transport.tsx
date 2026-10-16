@@ -161,11 +161,12 @@ export function Transport({
           >+</button>
         </div>
 
-        <div className="flex items-center gap-3 w-44">
+        <label className="flex items-center gap-2 w-52 text-xs text-white/60">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4 text-white/60 shrink-0">
             <path d="M11 5 6 9H3v6h3l5 4V5Z" />
             <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
           </svg>
+          <span className="shrink-0">Song volume</span>
           <input
             type="range"
             min={0}
@@ -174,11 +175,13 @@ export function Transport({
             value={master}
             onChange={(e) => onMaster(parseFloat(e.target.value))}
             className="no-drag w-full"
+            aria-label="Song volume"
+            title="Song volume"
             style={{
               background: `linear-gradient(to right, #fff ${master * 100}%, rgba(255,255,255,0.14) ${master * 100}%)`
             }}
           />
-        </div>
+        </label>
 
         {youtubeUrl && (
           <button

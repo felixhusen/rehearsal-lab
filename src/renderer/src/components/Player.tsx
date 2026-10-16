@@ -71,6 +71,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const pendingMetronome = useRef<{ videoId: string; settings: MetronomeSettings } | null>(null)
   const [mutes, setMutes] = useState<Set<StemId>>(new Set())
   const [solos, setSolos] = useState<Set<StemId>>(new Set())
+  const [metronomeSolo, setMetronomeSolo] = useState(false)
   const [master, setMaster] = useState(0.9)
   const [transpose, setTranspose] = useState(0)
   const [metronome, setMetronome] = useState<MetronomeSettings>({ ...DEFAULT_METRONOME_SETTINGS })
@@ -109,6 +110,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
     setVols({})
     setMutes(new Set())
     setSolos(new Set())
+    setMetronomeSolo(false)
     setPreset('all')
     setTranspose(0)
     engine.setTranspose(0)
@@ -223,8 +225,15 @@ export function Player({ song, settings }: Props): React.ReactElement {
   }, [song.videoId, decoding, decodeError, showVideo])
 
   useEffect(() => {
-    engine.applyMix(vols, mutes, solos, master, pans)
-  }, [vols, mutes, solos, master, pans])
+    const songMutes = metronomeSolo
+      ? new Set([...mutes, ...(Object.keys(buffers) as StemId[])])
+      : mutes
+    engine.applyMix(vols, songMutes, solos, master, pans)
+  }, [vols, mutes, solos, metronomeSolo, buffers, master, pans])
+
+  useEffect(() => {
+    if (settings) engine.setMetronomeSound(settings.metronomeSound)
+  }, [settings?.metronomeSound])
 
   const changePan = (id: StemId, value: number): void => {
     const next = { ...pansRef.current, [id]: value }
@@ -532,14 +541,20 @@ export function Player({ song, settings }: Props): React.ReactElement {
           <div className="mt-4">
             <MetronomeLane
               enabled={metronome.enabled}
+              soloed={metronomeSolo}
               bpm={metronome.bpm}
+              timeSignature={metronome.timeSignature}
               firstBeat={metronome.firstBeat}
               volume={metronome.volume}
+              pan={metronome.pan}
               disabled={decoding || !!decodeError || metronomeLoadedFor !== song.videoId}
               onEnabled={(enabled) => changeMetronome({ enabled })}
+              onSolo={() => setMetronomeSolo((soloed) => !soloed)}
               onBpm={(bpm) => changeMetronome({ bpm })}
+              onTimeSignature={(timeSignature) => changeMetronome({ timeSignature })}
               onSetFirstBeat={setFirstBeat}
               onVolume={(volume) => changeMetronome({ volume })}
+              onPan={(pan) => changeMetronome({ pan })}
             />
           </div>
           {metronomeError && <p role="status" className="mt-2 text-xs text-amber-300">{metronomeError}</p>}
@@ -559,7 +574,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 buffer={buffers[meta.id] ?? null}
                 duration={duration}
                 getPosition={getPosition}
-                audible={!mutes.has(meta.id) && (solos.size === 0 || solos.has(meta.id))}
+                audible={!metronomeSolo && !mutes.has(meta.id) && (solos.size === 0 || solos.has(meta.id))}
                 volume={vols[meta.id] ?? 1}
                 pan={pans[meta.id] ?? 0}
                 onPan={(value) => changePan(meta.id, value)}

@@ -135,11 +135,19 @@ function normalizeMetronome(value: unknown, duration: number): MetronomeSettings
   const volume = typeof input.volume === 'number' && Number.isFinite(input.volume)
     ? Math.max(0, Math.min(1, input.volume))
     : DEFAULT_METRONOME_SETTINGS.volume
+  const pan = typeof input.pan === 'number' && Number.isFinite(input.pan)
+    ? Math.max(-1, Math.min(1, input.pan))
+    : DEFAULT_METRONOME_SETTINGS.pan
+  const timeSignature = input.timeSignature === '3/4' || input.timeSignature === '6/8'
+    ? input.timeSignature
+    : DEFAULT_METRONOME_SETTINGS.timeSignature
   return {
     enabled: typeof input.enabled === 'boolean' ? input.enabled : DEFAULT_METRONOME_SETTINGS.enabled,
     bpm,
+    timeSignature,
     firstBeat,
-    volume
+    volume,
+    pan
   }
 }
 

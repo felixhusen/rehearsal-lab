@@ -1,11 +1,42 @@
 import {
   DEFAULT_METRONOME_SETTINGS,
   type MetronomeSettings,
+  type MetronomeSound,
   type StemId,
   type StemPanMap
 } from '../../../shared/types'
 import { SoundTouchNode } from '@soundtouchjs/audio-worklet'
 import processorUrl from '@soundtouchjs/audio-worklet/processor?url'
+
+const metronomeSampleUrls = import.meta.glob('../assets/metronome/*.wav', {
+  eager: true,
+  query: '?inline',
+  import: 'default'
+}) as Record<string, string>
+
+function sampleFilename(sound: MetronomeSound, variant: string): string {
+  const path = `../assets/metronome/${sound}-${variant}.wav`
+  if (metronomeSampleUrls[path]) return path
+  throw new Error(`Missing metronome sample: ${path}`)
+}
+
+function regularSampleFilename(sound: MetronomeSound, timeSignature: MetronomeSettings['timeSignature']): string {
+  const preferred = timeSignature === '6/8' ? 'eighth' : 'quarter'
+  for (const variant of [preferred, 'quarter', 'eighth', 'sixteenth', 'accents']) {
+    const path = `../assets/metronome/${sound}-${variant}.wav`
+    if (metronomeSampleUrls[path]) return path
+  }
+  return sampleFilename('Classic', 'quarter')
+}
+
+function audioBufferPeak(buffer: AudioBuffer): number {
+  let peak = 0
+  for (let channel = 0; channel < buffer.numberOfChannels; channel++) {
+    const data = buffer.getChannelData(channel)
+    for (let i = 0; i < data.length; i++) peak = Math.max(peak, Math.abs(data[i]))
+  }
+  return peak
+}
 
 export type BufferMap = Partial<Record<StemId, AudioBuffer>>
 
@@ -39,13 +70,23 @@ export class StemEngine {
     pans: {} as StemPanMap,
     mutes: new Set<StemId>(),
     solos: new Set<StemId>(),
-    master: 0.9
+    songVolume: 0.9
   }
-  private master: GainNode | null = null
+  private songGain: GainNode | null = null
+  private metronomePanNode: StereoPannerNode | null = null
   private sources: AudioBufferSourceNode[] = []
   private metronomeSettings: MetronomeSettings = { ...DEFAULT_METRONOME_SETTINGS }
+  private metronomeSound: MetronomeSound = 'Classic'
   private metronomeTimer: ReturnType<typeof setInterval> | null = null
-  private metronomeClicks = new Set<OscillatorNode>()
+  private metronomeClicks = new Set<AudioScheduledSourceNode>()
+  private metronomeAudioBuffers = new Map<string, AudioBuffer>()
+  private metronomeBufferLoads = new Map<string, Promise<AudioBuffer>>()
+  private metronomeSoundBuffers = new Map<string, {
+    regular: AudioBuffer
+    accent: AudioBuffer
+    regularPeak: number
+    accentPeak: number
+  }>()
   private metronomeAnchorPosition = 0
   private metronomeAnchorContext = 0
   private nextMetronomeBeat = 0
@@ -59,9 +100,12 @@ export class StemEngine {
   private ensureCtx(): AudioContext {
     if (!this.ctx) {
       this.ctx = new AudioContext()
-      this.master = this.ctx.createGain()
-      this.master.gain.value = this.mix.master
-      this.master.connect(this.ctx.destination)
+      this.songGain = this.ctx.createGain()
+      this.songGain.gain.value = this.mix.songVolume
+      this.songGain.connect(this.ctx.destination)
+      this.metronomePanNode = this.ctx.createStereoPanner()
+      this.metronomePanNode.pan.value = this.metronomeSettings.pan
+      this.metronomePanNode.connect(this.ctx.destination)
     }
     return this.ctx
   }
@@ -75,7 +119,7 @@ export class StemEngine {
       pan.pan.value = this.mix.pans[id] ?? 0
       g.gain.value = this.stemVolume(id)
       g.connect(pan)
-      pan.connect(this.master!)
+      pan.connect(this.songGain!)
       this.panners[id] = pan
       this.gains[id] = g
     }
@@ -99,7 +143,7 @@ export class StemEngine {
     this.gains = {}
     this.panners = {}
     this.pitchNodes = {}
-    this.mix = { vols: {}, pans: {}, mutes: new Set(), solos: new Set(), master: 0.9 }
+    this.mix = { vols: {}, pans: {}, mutes: new Set(), solos: new Set(), songVolume: 0.9 }
     this.buffers = buffers
   }
 
@@ -135,6 +179,13 @@ export class StemEngine {
       this.workletReady = null
       console.error('Could not initialize SoundTouch audio worklet', error)
       return
+    }
+    if (this.metronomeSettings.enabled) {
+      try {
+        await this.loadMetronomeSound(this.metronomeSound, this.metronomeSettings.timeSignature)
+      } catch (error) {
+        console.error('Could not load metronome samples', error)
+      }
     }
     if (generation !== this.generation || !this.playing) return
     if (!ctx) return
@@ -179,12 +230,12 @@ export class StemEngine {
     vols: Partial<Record<StemId, number>>,
     mutes: Set<StemId>,
     solos: Set<StemId>,
-    masterVol: number,
+    songVolume: number,
     pans: StemPanMap = {}
   ): void {
     this.mix = {
       vols: { ...vols }, pans: { ...pans },
-      mutes: new Set(mutes), solos: new Set(solos), master: masterVol
+      mutes: new Set(mutes), solos: new Set(solos), songVolume
     }
     if (!this.ctx) return
     const now = this.ctx.currentTime
@@ -192,7 +243,7 @@ export class StemEngine {
       this.getGain(id).gain.setTargetAtTime(this.stemVolume(id), now, 0.012)
       this.panners[id]?.pan.setTargetAtTime(pans[id] ?? 0, now, 0.012)
     }
-    this.master?.gain.setTargetAtTime(masterVol, now, 0.012)
+    this.songGain?.gain.setTargetAtTime(songVolume, now, 0.012)
   }
 
   stopAll(): void {
@@ -209,12 +260,97 @@ export class StemEngine {
   }
 
   setMetronome(settings: MetronomeSettings): void {
-    this.metronomeSettings = { ...settings }
+    const previous = this.metronomeSettings
+    const pan = Number.isFinite(settings.pan) ? Math.max(-1, Math.min(1, settings.pan)) : 0
+    this.metronomeSettings = { ...settings, pan }
+    if (previous.pan !== pan && this.ctx && this.metronomePanNode) {
+      this.metronomePanNode.pan.cancelScheduledValues(this.ctx.currentTime)
+      this.metronomePanNode.pan.setTargetAtTime(pan, this.ctx.currentTime, 0.012)
+    }
+    if (
+      previous.enabled === settings.enabled && previous.bpm === settings.bpm &&
+      previous.timeSignature === settings.timeSignature && previous.firstBeat === settings.firstBeat &&
+      previous.volume === settings.volume
+    ) return
+    this.refreshMetronome()
+  }
+
+  setMetronomeSound(sound: MetronomeSound): void {
+    if (this.metronomeSound === sound) return
+    this.metronomeSound = sound
+    this.refreshMetronome()
+  }
+
+  private refreshMetronome(): void {
     this.stopMetronome()
     if (!this.playing || !this.metronomeSettings.enabled || !this.ctx) return
-    const lead = 0.05
-    const position = this.expected() + lead * this.rate
-    this.startMetronome(position, this.ctx.currentTime + lead)
+    const generation = this.generation
+    const sound = this.metronomeSound
+    const timeSignature = this.metronomeSettings.timeSignature
+    void this.loadMetronomeSound(sound, timeSignature).then(() => {
+      if (generation !== this.generation || !this.playing || !this.metronomeSettings.enabled) return
+      if (
+        sound !== this.metronomeSound ||
+        timeSignature !== this.metronomeSettings.timeSignature
+      ) return
+      const position = this.expected()
+      this.startMetronome(position, this.ctx!.currentTime)
+    }).catch((error: unknown) => {
+      console.error('Could not load metronome samples', error)
+      if (generation !== this.generation || !this.playing || !this.metronomeSettings.enabled) return
+      if (
+        sound !== this.metronomeSound ||
+        timeSignature !== this.metronomeSettings.timeSignature
+      ) return
+      this.startMetronome(this.expected(), this.ctx!.currentTime)
+    })
+  }
+
+  private async loadMetronomeSound(
+    sound: MetronomeSound,
+    timeSignature: MetronomeSettings['timeSignature']
+  ): Promise<void> {
+    const regularFile = regularSampleFilename(sound, timeSignature)
+    const accentFile = metronomeSampleUrls[`../assets/metronome/${sound}-accents.wav`]
+      ? `../assets/metronome/${sound}-accents.wav`
+      : regularFile
+    const [regular, accent] = await Promise.all([
+      this.loadMetronomeBuffer(regularFile),
+      this.loadMetronomeBuffer(accentFile)
+    ])
+    this.metronomeSoundBuffers.set(`${sound}:${timeSignature}`, {
+      regular,
+      accent,
+      regularPeak: audioBufferPeak(regular),
+      accentPeak: audioBufferPeak(accent)
+    })
+  }
+
+  private loadMetronomeBuffer(filename: string): Promise<AudioBuffer> {
+    const cached = this.metronomeAudioBuffers.get(filename)
+    if (cached) return Promise.resolve(cached)
+    const pending = this.metronomeBufferLoads.get(filename)
+    if (pending) return pending
+    const ctx = this.ensureCtx()
+    const url = metronomeSampleUrls[filename]
+    if (!url) return Promise.reject(new Error(`Missing metronome sample asset: ${filename}`))
+    const request = fetch(url)
+      .then((response) => {
+        if (!response.ok) throw new Error(`Could not fetch metronome sample (${response.status})`)
+        return response.arrayBuffer()
+      })
+      .then((data) => ctx.decodeAudioData(data))
+      .then((buffer) => {
+        this.metronomeAudioBuffers.set(filename, buffer)
+        this.metronomeBufferLoads.delete(filename)
+        return buffer
+      })
+      .catch((error: unknown) => {
+        this.metronomeBufferLoads.delete(filename)
+        throw error
+      })
+    this.metronomeBufferLoads.set(filename, request)
+    return request
   }
 
   private startMetronome(position: number, startAt: number): void {
@@ -222,7 +358,7 @@ export class StemEngine {
     if (!this.ctx || !this.metronomeSettings.enabled) return
     this.metronomeAnchorPosition = position
     this.metronomeAnchorContext = startAt
-    const beatDuration = 60 / this.metronomeSettings.bpm
+    const beatDuration = this.metronomeBeatDuration()
     this.nextMetronomeBeat = Math.ceil(
       (position - this.metronomeSettings.firstBeat) / beatDuration - 1e-6
     )
@@ -234,7 +370,7 @@ export class StemEngine {
     if (!this.ctx || !this.playing || !this.metronomeSettings.enabled) return
     const now = this.ctx.currentTime
     const horizon = now + 0.12
-    const beatDuration = 60 / this.metronomeSettings.bpm
+    const beatDuration = this.metronomeBeatDuration()
     const songDuration = this.trackDuration()
     while (true) {
       const beat = this.nextMetronomeBeat
@@ -244,25 +380,51 @@ export class StemEngine {
       this.nextMetronomeBeat++
       if (when < now - 0.005 || position < 0 || (songDuration > 0 && position > songDuration)) continue
       if (this.metronomeSettings.volume <= 0) continue
-      const oscillator = this.ctx.createOscillator()
+      const beatsPerBar = this.metronomeBeatsPerBar()
+      const beatInBar = ((beat % beatsPerBar) + beatsPerBar) % beatsPerBar
+      const accent = beatInBar === 0 ||
+        (this.metronomeSettings.timeSignature === '6/8' && beatInBar === 3)
+      const buffers = this.metronomeSoundBuffers.get(
+        `${this.metronomeSound}:${this.metronomeSettings.timeSignature}`
+      )
+      const sample = buffers ? (accent ? buffers.accent : buffers.regular) : null
+      const source = sample ? this.ctx.createBufferSource() : this.ctx.createOscillator()
       const envelope = this.ctx.createGain()
-      const accent = beat % 4 === 0
-      const peak = this.metronomeSettings.volume * (accent ? 0.55 : 0.35)
-      oscillator.type = 'sine'
-      oscillator.frequency.setValueAtTime(accent ? 1760 : 1320, when)
-      envelope.gain.setValueAtTime(0.0001, when)
-      envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), when + 0.002)
-      envelope.gain.exponentialRampToValueAtTime(0.0001, when + 0.045)
-      oscillator.connect(envelope)
-      envelope.connect(this.master!)
-      oscillator.onended = () => {
-        oscillator.disconnect()
-        envelope.disconnect()
-        this.metronomeClicks.delete(oscillator)
+      let duration = 0.25
+      if (sample) {
+        const sampleSource = source as AudioBufferSourceNode
+        sampleSource.buffer = sample
+        const targetPeak = this.metronomeSettings.volume * (accent ? 1 : 0.8)
+        const samplePeak = accent ? buffers!.accentPeak : buffers!.regularPeak
+        envelope.gain.setValueAtTime(
+          Math.min(2.5, targetPeak / Math.max(0.0001, samplePeak)),
+          when
+        )
+        duration = Math.min(sample.duration, duration)
+      } else {
+        const oscillator = source as OscillatorNode
+        const peak = this.metronomeSettings.volume * (accent ? 1 : 0.8)
+        oscillator.type = 'triangle'
+        oscillator.frequency.setValueAtTime(accent ? 1760 : 1320, when)
+        envelope.gain.setValueAtTime(0.0001, when)
+        envelope.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), when + 0.002)
+        envelope.gain.exponentialRampToValueAtTime(0.0001, when + 0.045)
       }
-      this.metronomeClicks.add(oscillator)
-      oscillator.start(when)
-      oscillator.stop(when + 0.05)
+      source.connect(envelope)
+      // Keep the click outside the song fader so lowering the stems brings
+      // the metronome forward without changing its own volume.
+      envelope.connect(this.metronomePanNode ?? this.ctx.destination)
+      source.onended = () => {
+        source.disconnect()
+        envelope.disconnect()
+        this.metronomeClicks.delete(source)
+      }
+      this.metronomeClicks.add(source)
+      if (sample) (source as AudioBufferSourceNode).start(when, 0, duration)
+      else {
+        source.start(when)
+        source.stop(when + 0.05)
+      }
     }
   }
 
@@ -277,6 +439,18 @@ export class StemEngine {
       } catch {}
     }
     this.metronomeClicks.clear()
+  }
+
+  private metronomeBeatsPerBar(): number {
+    switch (this.metronomeSettings.timeSignature) {
+      case '3/4': return 3
+      case '6/8': return 6
+      default: return 4
+    }
+  }
+
+  private metronomeBeatDuration(): number {
+    return 60 / this.metronomeSettings.bpm * (this.metronomeSettings.timeSignature === '6/8' ? 0.5 : 1)
   }
 
   private stopSources(): void {
