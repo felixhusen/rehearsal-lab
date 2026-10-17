@@ -17,6 +17,9 @@ import { MetronomeLane } from './MetronomeLane'
 import { Transport, type PresetId } from './Transport'
 import { DownloadIcon } from './Icons'
 
+// number keys 1-6 mute the lane shown in that position, top to bottom
+const STEM_KEYS = ['1', '2', '3', '4', '5', '6']
+
 type BufferCacheMap = BufferMap
 
 const bufferCache = new Map<string, Promise<BufferCacheMap>>()
@@ -380,16 +383,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
     void window.stemkit.exportAllStems(song.videoId)
   }, [song.videoId])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.code === 'Space' && !(e.target instanceof HTMLInputElement)) {
-        e.preventDefault()
-        togglePlay()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [togglePlay])
+
 
   const applyPreset = (p: PresetId): void => {
     setPreset(p)
@@ -401,23 +395,48 @@ export function Player({ song, settings }: Props): React.ReactElement {
     else if (p === 'drumnbass') setSolos(new Set<StemId>(['drums', 'bass']))
   }
 
-  const toggleMute = (id: StemId): void => {
-    setPreset('custom')
-    const turningOn = !mutes.has(id)
-    if (turningOn && solos.has(id)) {
-      setSolos((prev) => {
+  const toggleMute = useCallback(
+    (id: StemId): void => {
+      setPreset('custom')
+      const turningOn = !mutes.has(id)
+      if (turningOn && solos.has(id)) {
+        setSolos((prev) => {
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
+      }
+      setMutes((prev) => {
         const next = new Set(prev)
-        next.delete(id)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
         return next
       })
+    },
+    [mutes, solos]
+  )
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.target instanceof HTMLInputElement) return
+      if (e.code === 'Space') {
+        e.preventDefault()
+        togglePlay()
+        return
+      }
+      const lane = STEM_KEYS.indexOf(e.key)
+      if (lane !== -1 && lane < stemMeta.length && !e.altKey && !e.ctrlKey && !e.metaKey) {
+        toggleMute(stemMeta[lane].id)
+      } else if (e.code === 'ArrowLeft' || e.code === 'ArrowRight') {
+        if (decoding || decodeError) return
+        e.preventDefault()
+        const step = e.shiftKey ? 15 : 5
+        seekTo(posRef.current + (e.code === 'ArrowLeft' ? -step : step))
+      }
     }
-    setMutes((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [togglePlay, toggleMute, stemMeta, seekTo, decoding, decodeError])
 
   const toggleSolo = (id: StemId): void => {
     setPreset('custom')

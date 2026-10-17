@@ -99,7 +99,7 @@ export function About({ version, onClose }: Props): React.ReactElement {
             StemKit website ↗
           </button>
           <button
-            onClick={() => void window.stemkit.openExternal('https://github.com/danvelope/stemkit/issues')}
+            onClick={() => void window.stemkit.openExternal('https://github.com/danielravina/stemkit/issues')}
             className="no-drag px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/10 text-white/70 hover:text-white text-[12px] transition-colors"
           >
             Get help ↗

@@ -366,7 +366,7 @@ app.whenReady().then(async () => {
       const youtube = ['youtube.com', 'www.youtube.com', 'youtu.be'].includes(url.hostname)
       const website = url.hostname === 'stemkit.pages.dev'
       const projectGithub =
-        url.hostname === 'github.com' && /^\/danvelope\/stemkit(?:\/|$)/.test(url.pathname)
+        url.hostname === 'github.com' && /^\/danielravina\/stemkit(?:\/|$)/.test(url.pathname)
       if (url.protocol === 'https:' && (youtube || website || projectGithub)) {
         shell.openExternal(url.toString())
       }
