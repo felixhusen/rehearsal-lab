@@ -491,7 +491,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-stretch gap-4 h-[220px]">
+          <div className="flex items-stretch gap-4">
             {showVideo && (
               <div className="relative w-[391px] shrink-0">
                 <div className="absolute -inset-4 bg-violet-500/10 blur-3xl rounded-full pointer-events-none" />
@@ -513,7 +513,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
               </div>
             )}
 
-            <aside className="relative flex-1 min-w-0 glass rounded-2xl px-6 py-5 rise-in flex flex-col justify-between">
+            <aside className={`relative flex-1 min-w-0 gap-4 glass rounded-2xl px-6 py-5 rise-in flex flex-col justify-between ${actionsOpen ? 'z-30' : ''}`}>
               <div className="flex items-center gap-4">
                 <SongThumb
                   videoId={song.videoId}
