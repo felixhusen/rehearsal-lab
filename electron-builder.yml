@@ -1,5 +1,5 @@
-appId: com.stemkit.app
-productName: StemKit
+appId: com.rehearsallab.app
+productName: RehearsalLab
 afterPack: scripts/after-pack.cjs
 directories:
   output: release
@@ -46,7 +46,7 @@ nsis:
 linux:
   icon: build/icon.png
   category: AudioVideo
-  executableName: stemkit
+  executableName: rehearsallab
   vendor: danvelope
   maintainer: danvelope
   synopsis: Local YouTube stem splitter and player
@@ -59,7 +59,7 @@ linux:
       arch:
         - x64
   desktop:
-    StartupWMClass: stemkit
+    StartupWMClass: rehearsallab
   extraResources:
     - from: extras/ffmpeg-linux/ffmpeg
       to: ffmpeg/ffmpeg
