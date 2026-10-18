@@ -1,11 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { AppSettings, Song, StemId, StemPanMap } from '../../../shared/types'
+import {
+  DEFAULT_METRONOME_SETTINGS,
+  type AppSettings,
+  type MetronomeSettings,
+  type Song,
+  type StemId,
+  type StemPanMap
+} from '../../../shared/types'
 import { engine, decodePayload, type BufferMap } from '../lib/engine'
 import { buildStemMeta } from '../lib/stems'
 import { fmtTime } from '../lib/format'
 import { SongThumb } from '../lib/thumbs'
 import { YouTubeHost, type YTState } from '../lib/youtube'
 import { StemLane } from './StemLane'
+import { MetronomeLane } from './MetronomeLane'
 import { Transport, type PresetId } from './Transport'
 import { DownloadIcon } from './Icons'
 
@@ -37,6 +45,7 @@ interface Props {
 }
 
 export function Player({ song, settings }: Props): React.ReactElement {
+  const [actionsOpen, setActionsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const hostRef = useRef<YouTubeHost | null>(null)
   const posRef = useRef(0)
@@ -62,9 +71,19 @@ export function Player({ song, settings }: Props): React.ReactElement {
   const pendingPan = useRef<{ videoId: string; pans: StemPanMap } | null>(null)
   const panGeneration = useRef(0)
   const panRevision = useRef(0)
+  const metronomeSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingMetronome = useRef<{ videoId: string; settings: MetronomeSettings } | null>(null)
   const [mutes, setMutes] = useState<Set<StemId>>(new Set())
   const [solos, setSolos] = useState<Set<StemId>>(new Set())
+  const [metronomeSolo, setMetronomeSolo] = useState(false)
   const [master, setMaster] = useState(0.9)
+  const [transpose, setTranspose] = useState(0)
+  const [metronome, setMetronome] = useState<MetronomeSettings>({ ...DEFAULT_METRONOME_SETTINGS })
+  const [metronomeLoadedFor, setMetronomeLoadedFor] = useState('')
+  const [metronomeError, setMetronomeError] = useState<string | null>(null)
+  const [exportingAll, setExportingAll] = useState(false)
+  const [exportingMix, setExportingMix] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const [preset, setPreset] = useState<PresetId | 'custom'>('all')
 
   const stemMeta = useMemo(() => buildStemMeta(Object.keys(buffers) as StemId[]), [buffers])
@@ -98,7 +117,14 @@ export function Player({ song, settings }: Props): React.ReactElement {
     setVols({})
     setMutes(new Set())
     setSolos(new Set())
+    setMetronomeSolo(false)
     setPreset('all')
+    setTranspose(0)
+    engine.setTranspose(0)
+    setMetronome({ ...DEFAULT_METRONOME_SETTINGS })
+    engine.setMetronome({ ...DEFAULT_METRONOME_SETTINGS })
+    setMetronomeLoadedFor('')
+    setMetronomeError(null)
     engine.stopAll()
 
     let cancelled = false
@@ -109,16 +135,30 @@ export function Player({ song, settings }: Props): React.ReactElement {
       pendingPan.current = null
       if (pending) void window.stemkit.setStemPan(pending.videoId, pending.pans).catch(() => {})
     }
+    const flushMetronome = (): void => {
+      if (metronomeSaveTimer.current !== null) clearTimeout(metronomeSaveTimer.current)
+      metronomeSaveTimer.current = null
+      const pending = pendingMetronome.current
+      pendingMetronome.current = null
+      if (pending) {
+        void window.stemkit.setMetronomeSettings(pending.videoId, pending.settings).catch(() => {})
+      }
+    }
     window.addEventListener('beforeunload', flushPan)
+    window.addEventListener('beforeunload', flushMetronome)
     setDecoding(true)
     Promise.all([
       getDecoded(song.videoId),
       window.stemkit.getStemPan(song.videoId).catch(() => {
         if (!cancelled) setPanError('Could not load saved pan settings. Using center.')
         return {} as StemPanMap
+      }),
+      window.stemkit.getMetronomeSettings(song.videoId).catch(() => {
+        if (!cancelled) setMetronomeError('Could not load saved metronome settings. Using defaults.')
+        return { ...DEFAULT_METRONOME_SETTINGS }
       })
     ])
-      .then(([decoded, savedPan]) => {
+      .then(([decoded, savedPan, savedMetronome]) => {
         if (cancelled) return
         const initialPans = Object.fromEntries(Object.keys(decoded).map((id) => {
           const value = savedPan[id as StemId]
@@ -126,6 +166,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
         })) as StemPanMap
         pansRef.current = initialPans
         setPans(initialPans)
+        setMetronome(savedMetronome)
+        engine.setMetronome(savedMetronome)
+        setMetronomeLoadedFor(song.videoId)
         setBuffers(decoded)
         engine.setBuffers(decoded)
         setVols(Object.fromEntries(Object.keys(decoded).map((id) => [id, 1])))
@@ -143,7 +186,9 @@ export function Player({ song, settings }: Props): React.ReactElement {
       cancelled = true
       if (panGeneration.current === generation) ++panGeneration.current
       window.removeEventListener('beforeunload', flushPan)
+      window.removeEventListener('beforeunload', flushMetronome)
       flushPan()
+      flushMetronome()
       engine.stopAll()
       hostRef.current?.destroy()
       hostRef.current = null
@@ -187,8 +232,15 @@ export function Player({ song, settings }: Props): React.ReactElement {
   }, [song.videoId, decoding, decodeError, showVideo])
 
   useEffect(() => {
-    engine.applyMix(vols, mutes, solos, master, pans)
-  }, [vols, mutes, solos, master, pans])
+    const songMutes = metronomeSolo
+      ? new Set([...mutes, ...(Object.keys(buffers) as StemId[])])
+      : mutes
+    engine.applyMix(vols, songMutes, solos, master, pans)
+  }, [vols, mutes, solos, metronomeSolo, buffers, master, pans])
+
+  useEffect(() => {
+    if (settings) engine.setMetronomeSound(settings.metronomeSound)
+  }, [settings?.metronomeSound])
 
   const changePan = (id: StemId, value: number): void => {
     const next = { ...pansRef.current, [id]: value }
@@ -294,16 +346,69 @@ export function Player({ song, settings }: Props): React.ReactElement {
     return posRef.current
   }, [bump])
 
-  const exportStem = useCallback(
-    (stem: string): void => {
-      void window.stemkit.exportStem(song.videoId, stem)
-    },
-    [song.videoId]
-  )
+  const changeTranspose = useCallback((semitones: number): void => {
+    setTranspose(semitones)
+    engine.setTranspose(semitones)
+  }, [])
+
+  const changeMetronome = useCallback((patch: Partial<MetronomeSettings>): void => {
+    const next = { ...metronome, ...patch }
+    setMetronome(next)
+    engine.setMetronome(next)
+    if (metronomeLoadedFor !== song.videoId) return
+    pendingMetronome.current = { videoId: song.videoId, settings: next }
+    if (metronomeSaveTimer.current !== null) clearTimeout(metronomeSaveTimer.current)
+    metronomeSaveTimer.current = setTimeout(() => {
+      metronomeSaveTimer.current = null
+      const pending = pendingMetronome.current
+      pendingMetronome.current = null
+      if (!pending) return
+      void window.stemkit.setMetronomeSettings(pending.videoId, pending.settings).then(() => {
+        setMetronomeError(null)
+      }).catch(() => {
+        setMetronomeError('Could not save metronome settings.')
+      })
+    }, 250)
+  }, [metronome, metronomeLoadedFor, song.videoId])
+
+  const setFirstBeat = useCallback((): void => {
+    const position = playingRef.current ? engine.expected() : posRef.current
+    changeMetronome({ firstBeat: Math.max(0, Math.min(duration, position)), enabled: true })
+  }, [changeMetronome, duration])
+
+  const exportMix = useCallback((): void => {
+    if (exportingMix) return
+    setExportingMix(true)
+    setExportError(null)
+    void (async () => {
+      let renderedMix: Uint8Array | undefined
+      if (metronome.enabled || transpose !== 0) {
+        renderedMix = (await engine.renderExportMix()) ?? undefined
+        if (!renderedMix) throw new Error('Could not render the full-track mix with the current settings')
+      }
+      await window.stemkit.exportMix(song.videoId, renderedMix)
+    })().catch((error: unknown) => {
+      console.error('Could not export overall mix', error)
+      setExportError(error instanceof Error ? error.message : 'Could not export overall mix.')
+    }).finally(() => setExportingMix(false))
+  }, [exportingMix, metronome.enabled, song.videoId, transpose])
 
   const exportAllStems = useCallback((): void => {
-    void window.stemkit.exportAllStems(song.videoId)
-  }, [song.videoId])
+    if (exportingAll) return
+    setExportingAll(true)
+    setExportError(null)
+    void (async () => {
+      let renderedMix: Uint8Array | undefined
+      if (metronome.enabled || transpose !== 0) {
+        renderedMix = (await engine.renderExportMix()) ?? undefined
+        if (!renderedMix) throw new Error('Could not render the full-track mix with the current settings')
+      }
+      await window.stemkit.exportAllStems(song.videoId, renderedMix)
+    })().catch((error: unknown) => {
+      console.error('Could not export audio', error)
+      setExportError(error instanceof Error ? error.message : 'Could not export audio.')
+    }).finally(() => setExportingAll(false))
+  }, [exportingAll, metronome.enabled, song.videoId, transpose])
 
 
 
@@ -386,7 +491,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
 
       <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-6">
         <div className="max-w-6xl mx-auto">
-          <div className="flex items-stretch gap-4 h-[220px]">
+          <div className="flex items-stretch gap-4">
             {showVideo && (
               <div className="relative w-[391px] shrink-0">
                 <div className="absolute -inset-4 bg-violet-500/10 blur-3xl rounded-full pointer-events-none" />
@@ -408,7 +513,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
               </div>
             )}
 
-            <aside className="flex-1 min-w-0 glass rounded-2xl px-6 py-5 rise-in flex flex-col justify-between">
+            <aside className={`relative flex-1 min-w-0 gap-4 glass rounded-2xl px-6 py-5 rise-in flex flex-col justify-between ${actionsOpen ? 'z-30' : ''}`}>
               <div className="flex items-center gap-4">
                 <SongThumb
                   videoId={song.videoId}
@@ -425,6 +530,36 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 <span className="shrink-0 text-xs px-3 py-1.5 rounded-full bg-white/5 text-white/50 font-medium">
                   {stemMeta.length} stems
                 </span>
+                <div className="relative shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setActionsOpen((open) => !open)}
+                    aria-label="Song actions"
+                    aria-haspopup="menu"
+                    aria-expanded={actionsOpen}
+                    title="Song actions"
+                    className="no-drag flex h-9 w-9 items-center justify-center rounded-lg bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"
+                  >
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden="true">
+                      <circle cx="5" cy="12" r="1.7" /><circle cx="12" cy="12" r="1.7" /><circle cx="19" cy="12" r="1.7" />
+                    </svg>
+                  </button>
+                  {actionsOpen && (
+                    <div role="menu" className="no-drag absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-white/10 bg-[#17171d] p-1 shadow-xl">
+                      <button role="menuitem" onClick={() => { setActionsOpen(false); exportMix() }} disabled={decoding || !!decodeError || exportingMix} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 disabled:opacity-40">
+                        {exportingMix ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white/80" /> : <DownloadIcon className="h-4 w-4" />}
+                        {exportingMix ? 'Exporting mix…' : 'Export'}
+                      </button>
+                      <button role="menuitem" onClick={() => { setActionsOpen(false); exportAllStems() }} disabled={decoding || !!decodeError || exportingAll} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10 disabled:opacity-40">
+                        {exportingAll ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/25 border-t-white/80" /> : <DownloadIcon className="h-4 w-4" />}
+                        {exportingAll ? 'Exporting all…' : 'Export all'}
+                      </button>
+                      {youtubeUrl && <button role="menuitem" onClick={() => { setActionsOpen(false); void window.stemkit.openExternal(youtubeUrl) }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-white/80 hover:bg-white/10">
+                        Open on YouTube
+                      </button>}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {!showVideo && decodeError && (
@@ -442,24 +577,13 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 ))}
               </div>
 
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={exportAllStems}
-                  disabled={decoding || !!decodeError}
-                  className="no-drag glass rounded-xl px-5 py-3 text-[13px] font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors flex items-center gap-2 disabled:opacity-40"
-                >
-                  <DownloadIcon className="w-4 h-4" />
-                  Export everything
-                </button>
-                {youtubeUrl && (
-                  <button
-                    onClick={() => window.stemkit.openExternal(youtubeUrl)}
-                    className="no-drag glass rounded-xl px-5 py-3 text-[13px] font-medium text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                  >
-                    Open on YouTube
-                  </button>
-                )}
-              </div>
+              {exportError && <p role="status" className="text-xs text-amber-300">{exportError}</p>}
+              {(exportingMix || exportingAll) && (
+                <div role="status" className="absolute bottom-4 right-5 flex items-center gap-2 text-xs text-white/65">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/25 border-t-white/80" />
+                  <span>Exporting...</span>
+                </div>
+              )}
             </aside>
           </div>
 
@@ -473,10 +597,31 @@ export function Player({ song, settings }: Props): React.ReactElement {
             onPreset={applyPreset}
             master={master}
             onMaster={setMaster}
-            youtubeUrl={youtubeUrl ?? undefined}
+            transpose={transpose}
+            onTranspose={changeTranspose}
           />
 
           {panError && <p role="status" className="mt-3 text-xs text-amber-300">{panError}</p>}
+          <div className="mt-4">
+            <MetronomeLane
+              enabled={metronome.enabled}
+              soloed={metronomeSolo}
+              bpm={metronome.bpm}
+              timeSignature={metronome.timeSignature}
+              firstBeat={metronome.firstBeat}
+              volume={metronome.volume}
+              pan={metronome.pan}
+              disabled={decoding || !!decodeError || metronomeLoadedFor !== song.videoId}
+              onEnabled={(enabled) => changeMetronome({ enabled })}
+              onSolo={() => setMetronomeSolo((soloed) => !soloed)}
+              onBpm={(bpm) => changeMetronome({ bpm })}
+              onTimeSignature={(timeSignature) => changeMetronome({ timeSignature })}
+              onSetFirstBeat={setFirstBeat}
+              onVolume={(volume) => changeMetronome({ volume })}
+              onPan={(pan) => changeMetronome({ pan })}
+            />
+          </div>
+          {metronomeError && <p role="status" className="mt-2 text-xs text-amber-300">{metronomeError}</p>}
           <div className="mt-4 space-y-2">
             {decoding
               ? [...Array(4)].map((_, i) => (
@@ -493,7 +638,7 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 buffer={buffers[meta.id] ?? null}
                 duration={duration}
                 getPosition={getPosition}
-                audible={!mutes.has(meta.id) && (solos.size === 0 || solos.has(meta.id))}
+                audible={!metronomeSolo && !mutes.has(meta.id) && (solos.size === 0 || solos.has(meta.id))}
                 volume={vols[meta.id] ?? 1}
                 pan={pans[meta.id] ?? 0}
                 onPan={(value) => changePan(meta.id, value)}
@@ -503,7 +648,6 @@ export function Player({ song, settings }: Props): React.ReactElement {
                 onToggleSolo={() => toggleSolo(meta.id)}
                 onVolume={(v) => setVols((prev) => ({ ...prev, [meta.id]: v }))}
                 onSeek={seekTo}
-                onExport={() => exportStem(meta.id)}
               />
             ))}
           </div>

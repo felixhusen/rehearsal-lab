@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtTime } from '../lib/format'
-import { PlayIcon, PauseIcon, ExternalIcon } from './Icons'
+import { PlayIcon, PauseIcon } from './Icons'
 
 export type PresetId = 'all' | 'karaoke' | 'acapella' | 'drumnbass'
 
@@ -21,8 +21,8 @@ interface Props {
   onPreset: (p: PresetId) => void
   master: number
   onMaster: (v: number) => void
-  // local-file songs have no video to link out to
-  youtubeUrl?: string
+  transpose: number
+  onTranspose: (v: number) => void
 }
 
 function SeekBar({
@@ -155,7 +155,8 @@ export function Transport({
   onPreset,
   master,
   onMaster,
-  youtubeUrl
+  transpose,
+  onTranspose
 }: Props): React.ReactElement {
   // onSeek clamps to the track bounds, so no need to guard here
   const skip = (seconds: number): void => onSeek(getPosition() + seconds)
@@ -198,7 +199,26 @@ export function Transport({
           ))}
         </div>
 
-        <div className="flex items-center gap-3 w-44">
+        <div className="no-drag flex items-center gap-2 text-xs text-white/60">
+          <span>Transpose</span>
+          <button
+            onClick={() => onTranspose(transpose - 1)}
+            disabled={transpose <= -12}
+            aria-label="Transpose down one semitone"
+            className="w-7 h-7 rounded-full bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+          >−</button>
+          <span className="w-9 text-center font-mono tabular-nums text-white" aria-live="polite">
+            {transpose > 0 ? `+${transpose}` : transpose}
+          </span>
+          <button
+            onClick={() => onTranspose(transpose + 1)}
+            disabled={transpose >= 12}
+            aria-label="Transpose up one semitone"
+            className="w-7 h-7 rounded-full bg-white/5 text-white hover:bg-white/10 disabled:opacity-30"
+          >+</button>
+        </div>
+
+        <label className="flex items-center gap-2 w-52 text-xs text-white/60">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="w-4 h-4 text-white/60 shrink-0">
             <path d="M11 5 6 9H3v6h3l5 4V5Z" />
             <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
@@ -211,21 +231,14 @@ export function Transport({
             value={master}
             onChange={(e) => onMaster(parseFloat(e.target.value))}
             className="no-drag w-full"
+            aria-label="Song volume"
+            title="Song volume"
             style={{
               background: `linear-gradient(to right, #fff ${master * 100}%, rgba(255,255,255,0.14) ${master * 100}%)`
             }}
           />
-        </div>
+        </label>
 
-        {youtubeUrl && (
-          <button
-            onClick={() => window.stemkit.openExternal(youtubeUrl)}
-            title="Open on YouTube"
-            className="no-drag text-white/40 hover:text-white transition-colors"
-          >
-            <ExternalIcon />
-          </button>
-        )}
       </div>
     </div>
   )

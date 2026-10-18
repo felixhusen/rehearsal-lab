@@ -2,7 +2,14 @@ import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync, openSync, r
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { userDataDir } from './env'
-import { DEFAULT_STEMS, type Song, type StemPanMap, type StemId } from '../shared/types'
+import {
+  DEFAULT_STEMS,
+  DEFAULT_METRONOME_SETTINGS,
+  type MetronomeSettings,
+  type Song,
+  type StemPanMap,
+  type StemId
+} from '../shared/types'
 
 // drives both the file-dialog filter and the pre-flight extension check in
 // startLocalJob; anything here is fair game for ffmpeg to decode
@@ -113,6 +120,55 @@ export function saveStemPan(videoId: string, pans: unknown): void {
   const song = panSong(videoId)
   // Do not recreate a deleted song directory for a late player save.
   writeFileSync(join(songDir(videoId), 'pan.json'), JSON.stringify(normalizePan(song, pans), null, 2))
+}
+
+function normalizeMetronome(value: unknown, duration: number): MetronomeSettings {
+  const input = value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {}
+  const bpm = typeof input.bpm === 'number' && Number.isFinite(input.bpm)
+    ? Math.max(40, Math.min(240, Math.round(input.bpm * 10) / 10))
+    : DEFAULT_METRONOME_SETTINGS.bpm
+  const firstBeat = typeof input.firstBeat === 'number' && Number.isFinite(input.firstBeat)
+    ? Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, input.firstBeat))
+    : DEFAULT_METRONOME_SETTINGS.firstBeat
+  const volume = typeof input.volume === 'number' && Number.isFinite(input.volume)
+    ? Math.max(0, Math.min(1, input.volume))
+    : DEFAULT_METRONOME_SETTINGS.volume
+  const pan = typeof input.pan === 'number' && Number.isFinite(input.pan)
+    ? Math.max(-1, Math.min(1, input.pan))
+    : DEFAULT_METRONOME_SETTINGS.pan
+  const timeSignature = input.timeSignature === '3/4' || input.timeSignature === '6/8'
+    ? input.timeSignature
+    : DEFAULT_METRONOME_SETTINGS.timeSignature
+  return {
+    enabled: typeof input.enabled === 'boolean' ? input.enabled : DEFAULT_METRONOME_SETTINGS.enabled,
+    bpm,
+    timeSignature,
+    firstBeat,
+    volume,
+    pan
+  }
+}
+
+export function loadMetronomeSettings(videoId: string): MetronomeSettings {
+  const song = panSong(videoId)
+  try {
+    return normalizeMetronome(
+      JSON.parse(readFileSync(join(songDir(videoId), 'metronome.json'), 'utf8')),
+      song.duration
+    )
+  } catch {
+    return { ...DEFAULT_METRONOME_SETTINGS }
+  }
+}
+
+export function saveMetronomeSettings(videoId: string, value: unknown): void {
+  const song = panSong(videoId)
+  writeFileSync(
+    join(songDir(videoId), 'metronome.json'),
+    JSON.stringify(normalizeMetronome(value, song.duration), null, 2)
+  )
 }
 
 export function stemsPresent(videoId: string, stems: string[]): boolean {

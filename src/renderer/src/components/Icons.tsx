@@ -60,6 +60,24 @@ export function WaveIcon({ className = base }: IconProps) {
   )
 }
 
+export function MetronomeIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M8 21h8l3-16H5l3 16Z" />
+      <path d="m12 17 2.5-8M9 21h6" />
+    </svg>
+  )
+}
+
+export function BeatMarkerIcon({ className = base }: IconProps) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M4 20h16M7 20V4" />
+      <path d="M7 5h10l-2.5 3L17 11H7" />
+    </svg>
+  )
+}
+
 export function PlayIcon({ className = base }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" className={className}>

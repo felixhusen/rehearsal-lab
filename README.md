@@ -19,6 +19,8 @@ Everything runs locally — no accounts, no API keys. Your songs, searches and a
 - Tight audio/video sync with instant, artifact-free seeking
 - One-click presets: **All · Karaoke · Acapella · Drums + Bass**
 - Per-stem mute/solo/volume, waveforms with click-to-seek
+- Transpose playback by up to an octave while keeping tempo
+- Optional metronome with manual BPM and per-song first-beat alignment
 - Parallel background splitting with live progress
 - Export any stem (or all) as WAV
 - Fully offline after setup — separation runs on Mac (MPS), NVIDIA GPUs (CUDA), AMD GPUs on Linux (ROCm, experimental) or CPU; ffmpeg included
