@@ -3,12 +3,12 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>StemKit: split songs from YouTube into stems</title>
+    <title>RehearsalLab: split songs from YouTube into stems</title>
     <meta
       name="description"
       content="Paste a YouTube link or open a local file, pick your instruments, and get vocals, drums, bass, guitar and piano as synced stems. Free and open source, and it runs entirely on your machine."
     />
-    <meta property="og:title" content="StemKit: split songs from YouTube into stems" />
+    <meta property="og:title" content="RehearsalLab: split songs from YouTube into stems" />
     <meta
       property="og:description"
       content="Free, open source, and it runs entirely on your machine. Karaoke tracks, acapellas and instrumentals from any YouTube link."
@@ -16,7 +16,7 @@
     <meta property="og:image" content="https://stemkit.pages.dev/media/og.jpg" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="StemKit splitting a song into six synced stems" />
+    <meta property="og:image:alt" content="RehearsalLab splitting a song into six synced stems" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://stemkit.pages.dev/media/og.jpg" />
     <link rel="icon" type="image/png" href="icon.png" />
@@ -709,8 +709,8 @@
     <div class="wrap">
       <nav>
         <a class="brand" href="/">
-          <img src="icon.png" alt="StemKit icon" />
-          <span>StemKit</span>
+          <img src="icon.png" alt="RehearsalLab icon" />
+          <span>RehearsalLab</span>
         </a>
         <div class="right">
           <a
@@ -858,7 +858,7 @@
           playsinline
           preload="metadata"
           disablepictureinpicture
-          aria-label="StemKit demo"
+          aria-label="RehearsalLab demo"
         >
           <source src="media/hero-loop.mp4" type="video/mp4" />
           <source src="media/hero-loop.webm" type="video/webm" />
@@ -890,7 +890,7 @@
             </ul>
           </div>
           <figure class="shot zoom">
-            <img src="media/yt-search.jpg" alt="StemKit search screen with YouTube results" />
+            <img src="media/yt-search.jpg" alt="RehearsalLab search screen with YouTube results" />
           </figure>
         </div>
       </section>
@@ -911,7 +911,7 @@
             </ul>
           </div>
           <figure class="shot">
-            <img src="media/stems.jpg" alt="StemKit splitting a song by instrument" />
+            <img src="media/stems.jpg" alt="RehearsalLab splitting a song by instrument" />
           </figure>
         </div>
       </section>
@@ -933,7 +933,7 @@
             </ul>
           </div>
           <figure class="shot">
-            <img src="media/export.jpg" alt="StemKit export menu" />
+            <img src="media/export.jpg" alt="RehearsalLab export menu" />
           </figure>
         </div>
       </section>
@@ -1307,7 +1307,7 @@
           <div class="req">
             <b>First launch</b
             ><span
-              >StemKit downloads its own engine, about 2GB, once. Internet is needed for that and
+              >RehearsalLab downloads its own engine, about 2GB, once. Internet is needed for that and
               for YouTube links; local files work offline.</span
             >
           </div>
@@ -1334,14 +1334,14 @@
                 stroke-linejoin="round"
               />
             </svg>
-            <span id="dl2-label">Download StemKit</span>
+            <span id="dl2-label">Download RehearsalLab</span>
           </a>
         </div>
       </div>
 
       <footer>
         <span class="note"
-          >© 2026 StemKit · MIT license · not affiliated with YouTube or Google</span
+          >© 2026 RehearsalLab · MIT license · not affiliated with YouTube or Google</span
         >
         <div class="links">
           <a
@@ -1411,10 +1411,10 @@
                 ? "Download for Windows"
                 : os === "linux"
                   ? "Download for Linux"
-                  : "Get StemKit";
+                  : "Get RehearsalLab";
           var href = pick ? pick.browser_download_url : release.html_url;
           var cap = pick
-            ? "StemKit " +
+            ? "RehearsalLab " +
               release.tag_name.replace(/^v/, "") +
               " · " +
               Math.round(pick.size / 1048576) +

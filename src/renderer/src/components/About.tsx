@@ -23,7 +23,7 @@ export function About({ version, onClose }: Props): React.ReactElement {
           break
         case 'none':
           setCheckingUpdates(false)
-          setUpdateMessage('StemKit is up to date.')
+          setUpdateMessage('RehearsalLab is up to date.')
           break
         case 'progress':
           setCheckingUpdates(false)
@@ -31,7 +31,7 @@ export function About({ version, onClose }: Props): React.ReactElement {
           break
         case 'downloaded':
           setCheckingUpdates(false)
-          setUpdateMessage(`Version ${event.version} is ready. Restart StemKit to install it.`)
+          setUpdateMessage(`Version ${event.version} is ready. Restart RehearsalLab to install it.`)
           break
         case 'error':
           setCheckingUpdates(false)
@@ -84,27 +84,12 @@ export function About({ version, onClose }: Props): React.ReactElement {
         </button>
         <LogoMark className="mx-auto h-11 w-11" />
         <h2 id="about-title" className="mt-3 text-lg font-semibold tracking-tight">
-          About StemKit
+          About RehearsalLab
         </h2>
         {version && <p className="mt-1 text-xs text-white/40">Version {version}</p>}
         <p className="mt-4 text-[12px] leading-relaxed text-white/50">
           Split songs into stems and play them locally.
         </p>
-
-        <div className="mt-5 flex justify-center gap-2">
-          <button
-            onClick={() => void window.stemkit.openExternal('https://stemkit.pages.dev')}
-            className="no-drag px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/10 text-white/70 hover:text-white text-[12px] transition-colors"
-          >
-            StemKit website ↗
-          </button>
-          <button
-            onClick={() => void window.stemkit.openExternal('https://github.com/danielravina/stemkit/issues')}
-            className="no-drag px-3 py-1.5 rounded-lg bg-white/[0.06] hover:bg-white/10 text-white/70 hover:text-white text-[12px] transition-colors"
-          >
-            Get help ↗
-          </button>
-        </div>
 
         <div className="mt-5 border-t border-white/[0.07] pt-4">
           <p role="status" className="min-h-4 text-[11px] text-white/40">

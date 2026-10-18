@@ -1,6 +1,6 @@
-# StemKit telemetry worker
+# RehearsalLab telemetry worker
 
-Anonymous usage counter for StemKit. The app POSTs one tiny heartbeat per
+Anonymous usage counter for RehearsalLab. The app POSTs one tiny heartbeat per
 install per day (random install id + version/os/arch, no PII) to `/ping`;
 `/stats` returns aggregated counts.
 

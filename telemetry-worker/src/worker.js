@@ -1,4 +1,4 @@
-/* Anonymous usage heartbeat collector for StemKit.
+/* Anonymous usage heartbeat collector for RehearsalLab.
 
    POST /ping  — the app pings once per install per day with a random install
                  id + version/os/arch. No PII, nothing linkable to a person.
