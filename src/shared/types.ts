@@ -156,8 +156,8 @@ export interface StemKitApi {
   setStemPan(videoId: string, pans: StemPanMap): Promise<void>
   getMetronomeSettings(videoId: string): Promise<MetronomeSettings>
   setMetronomeSettings(videoId: string, settings: MetronomeSettings): Promise<void>
-  exportStem(videoId: string, stem: string): Promise<{ saved: boolean; path?: string }>
-  exportAllStems(videoId: string): Promise<{ saved: boolean; path?: string; count?: number }>
+  exportMix(videoId: string, renderedMix?: Uint8Array): Promise<{ saved: boolean; path?: string }>
+  exportAllStems(videoId: string, renderedMix?: Uint8Array): Promise<{ saved: boolean; path?: string; count?: number }>
   searchYouTube(query: string): Promise<SearchResult[]>
   startJob(url: string, model?: string, stems?: string[]): Promise<{ started: boolean }>
   pickAudioFile(): Promise<string | null>

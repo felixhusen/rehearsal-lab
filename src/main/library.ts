@@ -127,7 +127,7 @@ function normalizeMetronome(value: unknown, duration: number): MetronomeSettings
     ? value as Record<string, unknown>
     : {}
   const bpm = typeof input.bpm === 'number' && Number.isFinite(input.bpm)
-    ? Math.max(40, Math.min(240, Math.round(input.bpm)))
+    ? Math.max(40, Math.min(240, Math.round(input.bpm * 10) / 10))
     : DEFAULT_METRONOME_SETTINGS.bpm
   const firstBeat = typeof input.firstBeat === 'number' && Number.isFinite(input.firstBeat)
     ? Math.max(0, Math.min(duration || Number.MAX_SAFE_INTEGER, input.firstBeat))

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { fmtTime } from '../lib/format'
-import { PlayIcon, PauseIcon, ExternalIcon } from './Icons'
+import { PlayIcon, PauseIcon } from './Icons'
 
 export type PresetId = 'all' | 'karaoke' | 'acapella' | 'drumnbass'
 
@@ -23,8 +23,6 @@ interface Props {
   onMaster: (v: number) => void
   transpose: number
   onTranspose: (v: number) => void
-  // local-file songs have no video to link out to
-  youtubeUrl?: string
 }
 
 function SeekBar({
@@ -158,8 +156,7 @@ export function Transport({
   master,
   onMaster,
   transpose,
-  onTranspose,
-  youtubeUrl
+  onTranspose
 }: Props): React.ReactElement {
   // onSeek clamps to the track bounds, so no need to guard here
   const skip = (seconds: number): void => onSeek(getPosition() + seconds)
@@ -226,7 +223,6 @@ export function Transport({
             <path d="M11 5 6 9H3v6h3l5 4V5Z" />
             <path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13" />
           </svg>
-          <span className="shrink-0">Song volume</span>
           <input
             type="range"
             min={0}
@@ -243,15 +239,6 @@ export function Transport({
           />
         </label>
 
-        {youtubeUrl && (
-          <button
-            onClick={() => window.stemkit.openExternal(youtubeUrl)}
-            title="Open on YouTube"
-            className="no-drag text-white/40 hover:text-white transition-colors"
-          >
-            <ExternalIcon />
-          </button>
-        )}
       </div>
     </div>
   )

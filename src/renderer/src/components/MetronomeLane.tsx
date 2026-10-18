@@ -1,5 +1,5 @@
 import { fmtTime } from "../lib/format";
-import { MetronomeIcon } from "./Icons";
+import { BeatMarkerIcon, MetronomeIcon } from "./Icons";
 import { PanKnob } from "./PanKnob";
 
 type Props = {
@@ -85,13 +85,13 @@ export const MetronomeLane = ({
           type="number"
           min={40}
           max={240}
-          step={1}
+          step={0.1}
           value={bpm}
           disabled={disabled}
           onChange={(event) => {
             const value = Number(event.target.value);
             if (Number.isFinite(value) && value >= 40 && value <= 240)
-              onBpm(Math.round(value));
+              onBpm(Math.round(value * 10) / 10);
           }}
           className="no-drag w-16 rounded-md border border-white/10 bg-black/20 px-2 py-1.5 text-center font-mono text-white disabled:opacity-40"
           aria-label="Metronome tempo in beats per minute"
@@ -115,21 +115,23 @@ export const MetronomeLane = ({
         </select>
       </label>
 
-      <button
-        type="button"
-        onClick={onSetFirstBeat}
-        disabled={disabled}
-        title="Use the current playhead position as beat one and enable the metronome"
-        className="no-drag shrink-0 rounded-lg bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-40"
-      >
-        Set first beat
-      </button>
-      <span className="shrink-0 text-[11px] font-mono text-white/40">
-        {fmtTime(firstBeat)}
-      </span>
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <span className="shrink-0 text-[11px] font-mono text-white/40">
+          {fmtTime(firstBeat)}
+        </span>
+        <button
+          type="button"
+          onClick={onSetFirstBeat}
+          disabled={disabled}
+          title="Use the current playhead position as beat one and enable the metronome"
+          aria-label="Set first beat"
+          className="no-drag flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/5 text-white/70 hover:bg-white/10 hover:text-white disabled:opacity-40"
+        >
+          <BeatMarkerIcon className="h-4 w-4" />
+        </button>
+      </div>
 
-      <label className="ml-auto flex min-w-36 items-center gap-3 text-xs text-white/50">
-        Volume
+      <label className="flex min-w-36 items-center gap-3 text-xs text-white/50">
         <input
           type="range"
           min={0}

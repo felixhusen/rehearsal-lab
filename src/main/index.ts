@@ -8,7 +8,7 @@ import {
   type MenuItemConstructorOptions
 } from 'electron'
 import { join, normalize, extname } from 'path'
-import { existsSync, copyFileSync, mkdirSync, createReadStream, statSync } from 'fs'
+import { existsSync, copyFileSync, mkdirSync, createReadStream, statSync, writeFileSync, unlinkSync } from 'fs'
 import { spawn } from 'child_process'
 import { createServer, type Server } from 'http'
 import type { AddressInfo } from 'net'
@@ -277,22 +277,28 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('jobs:cancel', (_e, videoId?: string) => cancelJob(videoId))
 
-  ipcMain.handle('stem:export', async (_e, videoId: string, stem: string) => {
+  ipcMain.handle('stem:export-mix', async (_e, videoId: string, renderedMix?: Uint8Array) => {
     const song = loadSongs().find((s) => s.videoId === videoId)
-    const file = join(stemsDir(videoId), `${stem}.wav`)
-    if (!existsSync(file)) throw new Error(`Missing stem ${stem}`)
+    const file = mixWavPath(videoId)
+    if (!renderedMix && !existsSync(file)) throw new Error('Missing full-track mix')
     const format = loadSettings().exportFormat
     const ext = format === 'aac' ? 'm4a' : 'wav'
     const result = await dialog.showSaveDialog({
-      title: `Export ${stem}`,
-      defaultPath: join(
-        app.getPath('downloads'),
-        `${sanitizeName(song?.title ?? videoId)} - ${stem}.${ext}`
-      ),
+      title: 'Export overall mix',
+      defaultPath: join(app.getPath('downloads'), `${sanitizeName(song?.title ?? videoId)}.${ext}`),
       filters: [{ name: format === 'aac' ? 'AAC audio' : 'WAV audio', extensions: [ext] }]
     })
     if (result.canceled || !result.filePath) return { saved: false }
-    if (format === 'aac') {
+    if (renderedMix) {
+      const tempMix = `${result.filePath}.tmp.wav`
+      try {
+        writeFileSync(tempMix, renderedMix)
+        if (format === 'aac') await transcodeToAac(requireExportFfmpeg(), tempMix, result.filePath)
+        else copyFileSync(tempMix, result.filePath)
+      } finally {
+        if (existsSync(tempMix)) unlinkSync(tempMix)
+      }
+    } else if (format === 'aac') {
       await transcodeToAac(requireExportFfmpeg(), file, result.filePath)
     } else {
       copyFileSync(file, result.filePath)
@@ -300,7 +306,7 @@ app.whenReady().then(async () => {
     return { saved: true, path: result.filePath }
   })
 
-  ipcMain.handle('stems:export-all', async (_e, videoId: string) => {
+  ipcMain.handle('stems:export-all', async (_e, videoId: string, renderedMix?: Uint8Array) => {
     const song = loadSongs().find((s) => s.videoId === videoId)
     const list = stemsFor(song)
     const dir = stemsDir(videoId)
@@ -326,9 +332,18 @@ app.whenReady().then(async () => {
     }
     let count = list.length
     const mix = mixWavPath(videoId)
-    if (existsSync(mix)) {
+    if (renderedMix || existsSync(mix)) {
       const mixDest = join(target, `${sanitizeName(song?.title ?? 'full track')}.${ext}`)
-      if (ffmpeg) await transcodeToAac(ffmpeg, mix, mixDest)
+      if (renderedMix) {
+        const tempMix = join(target, `.rendered-full-mix-${Date.now()}.wav`)
+        try {
+          writeFileSync(tempMix, renderedMix)
+          if (ffmpeg) await transcodeToAac(ffmpeg, tempMix, mixDest)
+          else copyFileSync(tempMix, mixDest)
+        } finally {
+          if (existsSync(tempMix)) unlinkSync(tempMix)
+        }
+      } else if (ffmpeg) await transcodeToAac(ffmpeg, mix, mixDest)
       else copyFileSync(mix, mixDest)
       count += 1
     }

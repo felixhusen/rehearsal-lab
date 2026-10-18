@@ -40,6 +40,30 @@ function audioBufferPeak(buffer: AudioBuffer): number {
 
 export type BufferMap = Partial<Record<StemId, AudioBuffer>>
 
+function encodeFloatWav(buffer: AudioBuffer): Uint8Array {
+  const channels = buffer.numberOfChannels
+  const dataBytes = buffer.length * channels * 4
+  const output = new ArrayBuffer(44 + dataBytes)
+  const view = new DataView(output)
+  const write = (offset: number, value: string): void => {
+    for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i))
+  }
+  write(0, 'RIFF'); view.setUint32(4, 36 + dataBytes, true); write(8, 'WAVE')
+  write(12, 'fmt '); view.setUint32(16, 16, true); view.setUint16(20, 3, true)
+  view.setUint16(22, channels, true); view.setUint32(24, buffer.sampleRate, true)
+  view.setUint32(28, buffer.sampleRate * channels * 4, true)
+  view.setUint16(32, channels * 4, true); view.setUint16(34, 32, true)
+  write(36, 'data'); view.setUint32(40, dataBytes, true)
+  let offset = 44
+  for (let i = 0; i < buffer.length; i++) {
+    for (let channel = 0; channel < channels; channel++) {
+      view.setFloat32(offset, buffer.getChannelData(channel)[i], true)
+      offset += 4
+    }
+  }
+  return new Uint8Array(output)
+}
+
 export async function decodePayload(
   payload: Record<string, Uint8Array>
 ): Promise<BufferMap> {
@@ -224,6 +248,62 @@ export class StemEngine {
       if (buf && buf.duration > d) d = buf.duration
     }
     return d
+  }
+
+  async renderExportMix(): Promise<Uint8Array | null> {
+    if ((!this.metronomeSettings.enabled && this.transpose === 0) || !this.hasBuffers()) return null
+    const duration = this.trackDuration()
+    const sampleRate = this.ctx?.sampleRate ?? 44100
+    const offline = new OfflineAudioContext(2, Math.ceil(duration * sampleRate), sampleRate)
+    if (this.transpose !== 0) await SoundTouchNode.register(offline, processorUrl)
+    for (const [id, buffer] of Object.entries(this.buffers) as [StemId, AudioBuffer][]) {
+      if (!buffer) continue
+      const source = offline.createBufferSource()
+      source.buffer = buffer
+      if (this.transpose !== 0) {
+        const pitch = new SoundTouchNode({ context: offline })
+        pitch.pitchSemitones.setValueAtTime(id === 'drums' ? 0 : this.transpose, 0)
+        pitch.playbackRate.setValueAtTime(1, 0)
+        source.connect(pitch)
+        pitch.connect(offline.destination)
+      } else {
+        source.connect(offline.destination)
+      }
+      source.start(0)
+    }
+    if (this.metronomeSettings.enabled) {
+      await this.loadMetronomeSound(this.metronomeSound, this.metronomeSettings.timeSignature)
+      const buffers = this.metronomeSoundBuffers.get(`${this.metronomeSound}:${this.metronomeSettings.timeSignature}`)!
+      const settings = this.metronomeSettings
+      const beatDuration = 60 / settings.bpm * (settings.timeSignature === '6/8' ? 0.5 : 1)
+      const beatsPerBar = this.metronomeBeatsPerBar()
+      const panner = offline.createStereoPanner()
+      panner.pan.value = settings.pan
+      panner.connect(offline.destination)
+      // Match live playback: the first-beat marker defines beat zero, so earlier
+      // clicks continue on the same grid instead of leaving a silent lead-in.
+      const firstBeatIndex = Math.ceil(-settings.firstBeat / beatDuration - 1e-6)
+      for (
+        let beat = firstBeatIndex,
+          position = settings.firstBeat + firstBeatIndex * beatDuration;
+        position <= duration;
+        beat++, position = settings.firstBeat + beat * beatDuration
+      ) {
+        if (position < 0 || settings.volume <= 0) continue
+        const beatInBar = ((beat % beatsPerBar) + beatsPerBar) % beatsPerBar
+        const accent = beatInBar === 0 || (settings.timeSignature === '6/8' && beatInBar === 3)
+        const sample = accent ? buffers.accent : buffers.regular
+        const peak = accent ? buffers.accentPeak : buffers.regularPeak
+        const source = offline.createBufferSource()
+        const gain = offline.createGain()
+        source.buffer = sample
+        gain.gain.value = Math.min(2.5, settings.volume * (accent ? 1 : 0.8) / Math.max(0.0001, peak))
+        source.connect(gain)
+        gain.connect(panner)
+        source.start(position, 0, Math.min(sample.duration, 0.25))
+      }
+    }
+    return encodeFloatWav(await offline.startRendering())
   }
 
   applyMix(
