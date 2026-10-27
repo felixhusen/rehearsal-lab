@@ -64,7 +64,7 @@ def crash_message(e):
     if "no kernel image" in low or "invalid device function" in low:
         return (
             "GPU engine incompatible with this GPU (compute capability not supported by the "
-            "installed engine) — update StemKit or turn off GPU acceleration in Settings"
+            "installed engine) — update RehearsalLab or turn off GPU acceleration in Settings"
         )
     return msg[:400] or e.__class__.__name__
 

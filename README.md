@@ -1,4 +1,4 @@
-# StemKit
+# RehearsalLab
 
 Split any YouTube song into isolated stems — **vocals, drums, bass, guitar, piano** and more — right on your machine.
 
@@ -9,7 +9,7 @@ Everything runs locally — no accounts, no API keys. Your songs, searches and a
 ![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-black) ![local](https://img.shields.io/badge/100%25-local-emerald)
 
 <p align="center">
-  <img src="docs/stemkit.png" alt="StemKit splitting Queen's Bohemian Rhapsody into six stems — video player, presets and color-coded waveform lanes" width="100%" />
+  <img src="docs/stemkit.png" alt="RehearsalLab splitting Queen's Bohemian Rhapsody into six stems — video player, presets and color-coded waveform lanes" width="100%" />
 </p>
 
 ## Features
@@ -28,9 +28,9 @@ Everything runs locally — no accounts, no API keys. Your songs, searches and a
 ## Download
 
 Grab installers from [Releases](https://github.com/danvelope/stemkit/releases):
-- **macOS**: `StemKit-x.y.z-mac-arm64.dmg` (Apple Silicon) or `StemKit-x.y.z-mac-x64.dmg` (Intel)
-- **Windows**: `StemKit-Setup-x.y.z.exe` (installer) or portable `.zip`
-- **Linux** (x64): `StemKit-x.y.z-linux-x86_64.AppImage` (portable, self-updating) or `StemKit-x.y.z-linux-amd64.deb`
+- **macOS**: `RehearsalLab-x.y.z-mac-arm64.dmg` (Apple Silicon) or `RehearsalLab-x.y.z-mac-x64.dmg` (Intel)
+- **Windows**: `RehearsalLab-Setup-x.y.z.exe` (installer) or portable `.zip`
+- **Linux** (x64): `RehearsalLab-x.y.z-linux-x86_64.AppImage` (portable, self-updating) or `RehearsalLab-x.y.z-linux-amd64.deb`
 
 First launch creates a private Python environment and downloads the separation engine (~2 GB) — one time. ffmpeg is bundled — nothing else to install.
 
@@ -39,14 +39,14 @@ Optional quality upgrades live behind a gear icon in the app (Settings), each wi
 - **Fine-tuned demucs** (htdemucs_ft): +~320 MB, up to 4× slower
 - **Refinement passes**: 2 shifts instead of 1, up to 3× slower
 
-> **macOS first launch**: builds are signed with a Developer ID but not notarized, so macOS may say it "cannot verify the developer". One-time fix: **System Settings → Privacy & Security → Open Anyway** (or `xattr -cr /Applications/StemKit.app`).
+> **macOS first launch**: builds are signed with a Developer ID but not notarized, so macOS may say it "cannot verify the developer". One-time fix: **System Settings → Privacy & Security → Open Anyway** (or `xattr -cr /Applications/RehearsalLab.app`).
 >
 > **Windows**: SmartScreen may warn on first run — "More info → Run anyway".
 
 ## Requirements
 
 - **macOS 12+** (Apple Silicon or Intel x86_64) or **Windows 10/11** (x64) or **Linux x64** (Ubuntu 22.04+ or equivalent; NVIDIA driver for GPU splits, AMD via ROCm on Linux — experimental)
-- No manual installs: if no Python 3.9+ is detected, StemKit downloads a private runtime (python-build-standalone) during first-launch setup
+- No manual installs: if no Python 3.9+ is detected, RehearsalLab downloads a private runtime (python-build-standalone) during first-launch setup
 - Node.js 24+ only for building from source
 
 > **Intel Mac**: PyTorch publishes no macOS x86_64 wheels past 2.2.2, so first-launch setup installs that build instead of the 2.5.1 used everywhere else. MPS is still available on that build when the machine has a Metal-capable GPU (verified on an Intel Mac with a discrete GPU); integrated-only Macs fall back to CPU.
